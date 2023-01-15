@@ -8,3 +8,9 @@ Terraform is used to provision the required AWS resources:
 export AWS_ACCESS_KEY_ID="xxx"
 export AWS_SECRET_ACCESS_KEY="yyy"
 ```
+
+# objectives
+1. check if "authentication" header is malformed or missing in the following 
+2. return a status 400 if the "authentication" header is malformed or missing in the following lambda code 
+3. return a status 403 if "token" is invalid or empty
+4. 
