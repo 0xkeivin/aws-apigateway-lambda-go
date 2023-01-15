@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 )
 
 // create struct for TokenLookupItem
@@ -48,28 +49,38 @@ func GetAuthenticatedUserEmail(token string) (email string, ok bool) {
 		TableName: aws.String(tableName),
 		AttributesToGet: []*string{
 			aws.String("token"),
+			aws.String("email"),
 		},
 		/* ... */
-	})
-
+		Key: map[string]*dynamodb.AttributeValue{
+			"token": {
+				S: aws.String(token),
+			},
+		},
+	},
+	)
 	if err != nil {
 		log.Println("DynamoDB Error!", err)
 		return "", false
 	}
+
 	log.Printf("dynamoDB result: %v", result)
 
-	// item := TokenLookupItem{
-	// 	Email: email,
-	// 	Token: token,
-	// }
+	item := TokenLookupItem{
+		Email: email,
+		Token: token,
+	}
 
-	// err = dynamodbattribute.UnmarshalMap(result.Item, &item)
-
+	err = dynamodbattribute.UnmarshalMap(result.Item, &item)
+	if item.Email == "" {
+		log.Println("DynamoDB Error!", err)
+		return "", false
+	}
 	// Validate the given token with one from the database
 	// and return user email if the tokens match ...
 
 	// return "", false
-	return result.String(), true
+	return item.Email, true
 }
 
 func AuthenticateUser(headers map[string]string) (string, error) {
@@ -89,6 +100,7 @@ func AuthenticateUser(headers map[string]string) (string, error) {
 	// remove whitespace
 	// token := strings.TrimSpace(authenticationHeader)
 	token := authenticationHeader
+	fmt.Printf("token: %q", token)
 	email, ok := GetAuthenticatedUserEmail(token)
 	log.Printf("email: %v", email)
 	if !ok {
@@ -112,7 +124,12 @@ func Handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 
 	if err != nil {
 		// Return appropriate responses on failed authentication
-		return events.APIGatewayProxyResponse{Body: err.Error(), StatusCode: 400}, nil
+		if err.Error() == "authentication header is missing" {
+			return events.APIGatewayProxyResponse{Body: err.Error(), StatusCode: 400}, nil
+		}
+		if err.Error() == "invalid token" {
+			return events.APIGatewayProxyResponse{Body: err.Error(), StatusCode: 403}, nil
+		}
 	}
 	// stdout and stderr are sent to AWS CloudWatch Logs
 	// log.Printf("Processing Lambda request %v\n", request.RequestContext)

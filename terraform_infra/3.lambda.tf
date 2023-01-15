@@ -44,6 +44,7 @@ EOF
 
 }
 
+
 # Attach role to Managed Policy
 variable "iam_policy_arn" {
   description = "IAM Policy to be attached to role"
