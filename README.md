@@ -14,3 +14,8 @@ export AWS_SECRET_ACCESS_KEY="yyy"
 2. [x] - return a status 403 if "token" is invalid or empty
 3. [x] - Fix Query user notes
 4. [x] - Limit user notes to 10
+
+# go test 
+```bash
+go test -v -cover lambda-go/main*  
+```

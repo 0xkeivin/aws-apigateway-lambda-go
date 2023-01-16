@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
@@ -29,29 +30,47 @@ type UserNote struct {
 	ID   string `json:"id"`
 }
 
-// func GetDynamoDBClient() *dynamodb.DynamoDB {
-// 	sess := session.Must(session.NewSessionWithOptions(session.Options{
-// 		SharedConfigState: session.SharedConfigEnable,
-// 	}))
-// 	svc := dynamodb.New(sess)
-// 	log.Printf("GetDynamoDBClient func ran")
-// 	return svc
-// }
+//	func GetDynamoDBClient() *dynamodb.DynamoDB {
+//		sess := session.Must(session.NewSessionWithOptions(session.Options{
+//			SharedConfigState: session.SharedConfigEnable,
+//		}))
+//		svc := dynamodb.New(sess)
+//		log.Printf("GetDynamoDBClient func ran")
+//		return svc
+//	}
+type AwsCredentials struct {
+	accessKeyID     string
+	secretAccessKey string
+}
 
-func GetDynamoDBClient() (*dynamodb.DynamoDB, error) {
+func GetDynamoDBClient(params ...interface{}) (*dynamodb.DynamoDB, error) {
 	log.Printf("GetDynamoDBClient func ran")
-	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String("ap-southeast-1"),
-	})
+	var sess *session.Session
+	var err error
+	if params != nil {
+		// convert to AwsCredentials
+		awsCreds := params[0].(AwsCredentials)
+		sess, err = session.NewSession(&aws.Config{
+			Region: aws.String("ap-southeast-1"),
+			Credentials: credentials.NewStaticCredentials(
+				awsCreds.accessKeyID,
+				awsCreds.secretAccessKey,
+				""),
+		})
+	} else {
+		sess, err = session.NewSession(&aws.Config{
+			Region: aws.String("ap-southeast-1"),
+		})
+	}
 	if err != nil {
 		return nil, err
 	}
 	return dynamodb.New(sess), nil
 }
-func GetAuthenticatedUserEmail(token string) (email string, ok bool) {
+func GetAuthenticatedUserEmail(token string, dynamoDBClient *dynamodb.DynamoDB) (email string, ok bool) {
 	log.Printf("GetAuthenticatedUserEmail func ran")
 
-	dynamoDBClient, _ := GetDynamoDBClient()
+	// dynamoDBClient, _ := GetDynamoDBClient()
 
 	tableName := "token-email-lookup"
 
@@ -74,7 +93,7 @@ func GetAuthenticatedUserEmail(token string) (email string, ok bool) {
 		return "", false
 	}
 
-	log.Printf("dynamoDB result: %v", result)
+	// log.Printf("dynamoDB result: %v", result)
 
 	item := TokenLookupItem{
 		Email: email,
@@ -93,8 +112,8 @@ func GetAuthenticatedUserEmail(token string) (email string, ok bool) {
 	return item.Email, true
 }
 
-func QueryUserNotes(email string) []UserNote {
-	dynamoDBClient, _ := GetDynamoDBClient()
+func QueryUserNotes(email string, dynamoDBClient *dynamodb.DynamoDB) []UserNote {
+	// dynamoDBClient, _ := GetDynamoDBClient()
 
 	// User the following date format for "now"
 	// dateNow := time.Now().Format(time.RFC3339)
@@ -137,7 +156,22 @@ func QueryUserNotes(email string) []UserNote {
 
 func AuthenticateUser(headers map[string]string) (string, error) {
 	// You can get Authentication header in the following way:
-	authenticationHeader := headers["Authentication"]
+	// get or values
+	authenticationHeaders := []string{
+		headers["Authentication"],
+		headers["authentication"],
+	}
+	// get non empty value
+	var authenticationHeader string
+	for _, v := range authenticationHeaders {
+		if v != "" {
+			authenticationHeader = v
+			break
+		}
+	}
+	// authenticationHeader := headers["Authentication"]
+	// get small caps authentication
+	// authenticationHeader2 := headers["authentication"]
 	// get token from header Authorization
 
 	log.Printf("authenticationHeader: %v", authenticationHeader)
@@ -153,7 +187,9 @@ func AuthenticateUser(headers map[string]string) (string, error) {
 	// token := strings.TrimSpace(authenticationHeader)
 	token := authenticationHeader
 	fmt.Printf("token: %q", token)
-	email, ok := GetAuthenticatedUserEmail(token)
+	// initiate db
+	dynamoDBClient, _ := GetDynamoDBClient()
+	email, ok := GetAuthenticatedUserEmail(token, dynamoDBClient)
 	log.Printf("email: %v", email)
 	if !ok {
 		return "", errors.New("invalid token")
@@ -168,9 +204,9 @@ func AuthenticateUser(headers map[string]string) (string, error) {
 // However you could use other event sources (S3, Kinesis etc), or JSON-decoded primitive types such as 'string'.
 func Handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	headers := request.Headers
-	// for key, value := range headers {
-	// 	log.Printf("Header key=%s, value=%s", key, value)
-	// }
+	for key, value := range headers {
+		log.Printf("Header key=%s, value=%s", key, value)
+	}
 
 	email, err := AuthenticateUser(headers)
 
@@ -185,7 +221,8 @@ func Handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	}
 
 	// user notes section
-	userNotes := QueryUserNotes(email)
+	dynamoDBClient, _ := GetDynamoDBClient()
+	userNotes := QueryUserNotes(email, dynamoDBClient)
 
 	var buf bytes.Buffer
 
