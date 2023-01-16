@@ -30,14 +30,6 @@ type UserNote struct {
 	ID   string `json:"id"`
 }
 
-//	func GetDynamoDBClient() *dynamodb.DynamoDB {
-//		sess := session.Must(session.NewSessionWithOptions(session.Options{
-//			SharedConfigState: session.SharedConfigEnable,
-//		}))
-//		svc := dynamodb.New(sess)
-//		log.Printf("GetDynamoDBClient func ran")
-//		return svc
-//	}
 type AwsCredentials struct {
 	accessKeyID     string
 	secretAccessKey string
@@ -69,9 +61,6 @@ func GetDynamoDBClient(params ...interface{}) (*dynamodb.DynamoDB, error) {
 }
 func GetAuthenticatedUserEmail(token string, dynamoDBClient *dynamodb.DynamoDB) (email string, ok bool) {
 	log.Printf("GetAuthenticatedUserEmail func ran")
-
-	// dynamoDBClient, _ := GetDynamoDBClient()
-
 	tableName := "token-email-lookup"
 
 	result, err := dynamoDBClient.GetItem(&dynamodb.GetItemInput{
@@ -107,13 +96,10 @@ func GetAuthenticatedUserEmail(token string, dynamoDBClient *dynamodb.DynamoDB) 
 	}
 	// Validate the given token with one from the database
 	// and return user email if the tokens match ...
-
-	// return "", false
 	return item.Email, true
 }
 
 func QueryUserNotes(email string, dynamoDBClient *dynamodb.DynamoDB) []UserNote {
-	// dynamoDBClient, _ := GetDynamoDBClient()
 
 	// User the following date format for "now"
 	// dateNow := time.Now().Format(time.RFC3339)
@@ -169,10 +155,6 @@ func AuthenticateUser(headers map[string]string) (string, error) {
 			break
 		}
 	}
-	// authenticationHeader := headers["Authentication"]
-	// get small caps authentication
-	// authenticationHeader2 := headers["authentication"]
-	// get token from header Authorization
 
 	log.Printf("authenticationHeader: %v", authenticationHeader)
 	// if authenticationHeader is missing or malformed
@@ -180,11 +162,6 @@ func AuthenticateUser(headers map[string]string) (string, error) {
 		return "", errors.New("authentication header is missing")
 	}
 
-	// token := strings.Split(authenticationHeader, "Bearer ")[1]
-	// log.Printf("token: %v", token)
-	// Validate the Authentication header and retrieve token
-	// remove whitespace
-	// token := strings.TrimSpace(authenticationHeader)
 	token := authenticationHeader
 	fmt.Printf("token: %q", token)
 	// initiate db
@@ -243,14 +220,6 @@ func Handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		},
 	}
 	return resp, nil
-
-	// stdout and stderr are sent to AWS CloudWatch Logs
-	// log.Printf("Processing Lambda request %v\n", request.RequestContext)
-	// outputString := fmt.Sprintf("Hello world, token: %v", email)
-	// return events.APIGatewayProxyResponse{
-	// 	Body:       outputString,
-	// 	StatusCode: 200,
-	// }, nil
 }
 
 func main() {
