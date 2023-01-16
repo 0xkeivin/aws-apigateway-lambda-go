@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -17,6 +19,14 @@ import (
 type TokenLookupItem struct {
 	Email string `json:"email"`
 	Token string `json:"token"`
+}
+
+// create struct for user note
+type UserNote struct {
+	User string `json:"user"`
+	Text string `json:"text"`
+	Date string `json:"create_date"`
+	ID   string `json:"id"`
 }
 
 // func GetDynamoDBClient() *dynamodb.DynamoDB {
@@ -83,6 +93,48 @@ func GetAuthenticatedUserEmail(token string) (email string, ok bool) {
 	return item.Email, true
 }
 
+func QueryUserNotes(email string) []UserNote {
+	dynamoDBClient, _ := GetDynamoDBClient()
+
+	// User the following date format for "now"
+	// dateNow := time.Now().Format(time.RFC3339)
+
+	result, err := dynamoDBClient.Query(&dynamodb.QueryInput{
+		TableName: aws.String("user-notes"),
+		KeyConditions: map[string]*dynamodb.Condition{
+			"user": {
+				ComparisonOperator: aws.String("EQ"),
+				AttributeValueList: []*dynamodb.AttributeValue{
+					{
+						S: aws.String(email),
+					},
+				},
+			},
+		},
+		ScanIndexForward: aws.Bool(false), // sort by date descending
+		Limit:            aws.Int64(10),
+		/* ... */
+	})
+	if err != nil {
+		log.Println("DynamoDB - user-notes Error!", err)
+		return nil
+	}
+	if result.Items == nil {
+		log.Println("DynamoDB user-notes empty!", err)
+		return nil
+	}
+
+	// unmarshal the result
+	userNotes := []UserNote{}
+	err = dynamodbattribute.UnmarshalListOfMaps(result.Items, &userNotes)
+	if err != nil {
+		log.Println("error getting notes", err.Error())
+		return nil
+	}
+
+	return userNotes
+}
+
 func AuthenticateUser(headers map[string]string) (string, error) {
 	// You can get Authentication header in the following way:
 	authenticationHeader := headers["Authentication"]
@@ -131,13 +183,37 @@ func Handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 			return events.APIGatewayProxyResponse{Body: err.Error(), StatusCode: 403}, nil
 		}
 	}
+
+	// user notes section
+	userNotes := QueryUserNotes(email)
+
+	var buf bytes.Buffer
+
+	body, err := json.Marshal(userNotes)
+
+	if err != nil {
+		return events.APIGatewayProxyResponse{Body: request.Body, StatusCode: 400}, nil
+	}
+
+	json.HTMLEscape(&buf, body)
+
+	resp := events.APIGatewayProxyResponse{
+		StatusCode:      200,
+		IsBase64Encoded: false,
+		Body:            buf.String(),
+		Headers: map[string]string{
+			"Content-Type": "application/json",
+		},
+	}
+	return resp, nil
+
 	// stdout and stderr are sent to AWS CloudWatch Logs
 	// log.Printf("Processing Lambda request %v\n", request.RequestContext)
-	outputString := fmt.Sprintf("Hello world, token: %v", email)
-	return events.APIGatewayProxyResponse{
-		Body:       outputString,
-		StatusCode: 200,
-	}, nil
+	// outputString := fmt.Sprintf("Hello world, token: %v", email)
+	// return events.APIGatewayProxyResponse{
+	// 	Body:       outputString,
+	// 	StatusCode: 200,
+	// }, nil
 }
 
 func main() {
