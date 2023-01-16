@@ -17,5 +17,9 @@ export AWS_SECRET_ACCESS_KEY="yyy"
 
 # go test 
 ```bash
+cp .env.example .env # fille in the requirement aws credentials
 go test -v -cover lambda-go/main*  
 ```
+
+# for manual tests 
+url: https://djte904663.execute-api.ap-southeast-1.amazonaws.com/api
